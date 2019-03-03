@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
 import getopt
+import itertools
 import os
 import string
 import struct
 import sys
 import time
+import traceback
 
 class Decoder:
     def __init__(self, files, debug=False):
@@ -18,7 +20,7 @@ class Decoder:
         fd = os.open(fname, os.O_RDONLY)
         self.fd = fd
         st = os.fstat(fd)
-        buf = os.read(fd, 0x2000)
+        buf = os.read(fd, 0x4000)
         i = buf.index(b"mdat")
         os.lseek(fd, i + struct.unpack_from(">I", buf, i - 4)[0], os.SEEK_SET)
         buf = os.read(fd, 0x100)
@@ -45,8 +47,9 @@ class Decoder:
                 self.decode_init(f)
             except Exception as e:
                 if self.debug:
+                    traceback.print_exc()
                     raise(e)
-                print(repr(e), file=sys.stderr)
+                print("While processing %s: %s" % (f, repr(e)), file=sys.stderr)
                 continue
                 
             for o in self.offsets:
@@ -65,8 +68,9 @@ class Decoder:
             os.close(self.fd)
 
     def decode(self):
+        first = next(self.decode_data())
         print("# " + time.strftime("%Y-%m-%dT%H:%M:%SZ", self.tm))
-        for d in self.decode_data():
+        for d in itertools.chain([first], self.decode_data()):
             # XXX
             vc = list(struct.unpack_from("28B", d[-1]))
             while len(vc) and vc[-1] == 0:
@@ -115,7 +119,7 @@ if __name__ == '__main__':
             use_gpx = True
 
     try:
-        d = Decoder(args)
+        d = Decoder(args, debug=debug)
         if use_gpx:
             d.output_gpx()
         else:
